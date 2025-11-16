@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>贪吃蛇游戏</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
+                'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            background: linear-gradient(135deg, #1e5128 0%, #2d6a4f 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .game-container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 30px;
+            max-width: 500px;
+            width: 100%;
+        }
+
+        h1 {
+            text-align: center;
+            color: #1e5128;
+            font-size: 36px;
+            margin-bottom: 20px;
+        }
+
+        .score-board {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            font-size: 20px;
+            font-weight: bold;
+            color: #2d6a4f;
+        }
+
+        .game-board {
+            position: relative;
+            width: 400px;
+            height: 400px;
+            margin: 0 auto;
+            background: #1a1a1a;
+            border: 4px solid #2d6a4f;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .cell {
+            position: absolute;
+            width: 18px;
+            height: 18px;
+            border-radius: 3px;
+        }
+
+        .snake-head {
+            background: #4ade80;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .snake-body {
+            background: #22c55e;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .food {
+            background: #ef4444;
+            border-radius: 50%;
+        }
+
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.85);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            z-index: 10;
+        }
+
+        .overlay h2 {
+            font-size: 36px;
+            margin-bottom: 20px;
+        }
+
+        .overlay p {
+            font-size: 20px;
+            margin-bottom: 30px;
+        }
+
+        button {
+            background: #22c55e;
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 18px;
+            font-weight: bold;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        button:hover {
+            background: #16a34a;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(34, 197, 94, 0.4);
+        }
+
+        .instructions {
+            text-align: center;
+            margin-top: 20px;
+            color: #666;
+            font-size: 14px;
+        }
+
+        .instructions p {
+            margin: 5px 0;
+        }
+
+        @media (max-width: 500px) {
+            .game-board {
+                width: 300px;
+                height: 300px;
+            }
+
+            h1 {
+                font-size: 28px;
+            }
+
+            .score-board {
+                font-size: 16px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <h1>🐍 贪吃蛇游戏</h1>
+        
+        <div class="score-board">
+            <div>得分: <span id="score">0</span></div>
+            <div>长度: <span id="length">1</span></div>
+        </div>
+
+        <div class="game-board" id="gameBoard">
+            <div class="overlay" id="startOverlay">
+                <h2>准备开始</h2>
+                <p>使用方向键控制蛇的移动</p>
+                <button onclick="startGame()">开始游戏</button>
+            </div>
+        </div>
+
+        <div class="instructions">
+            <p>🎮 使用方向键 ↑↓←→ 控制蛇的移动</p>
+            <p>⏸️ 按空格键暂停/继续游戏</p>
+            <p>🍎 吃到食物增加分数和长度</p>
+        </div>
+    </div>
+
+    <script>
+        const GRID_SIZE = 20;
+        const CELL_SIZE = 20;
+        const INITIAL_SPEED = 150;
+
+        let snake = [[10, 10]];
+        let food = [5, 5];
+        let direction = { x: 1, y: 0 };
+        let score = 0;
+        let gameLoop = null;
+        let isPlaying = false;
+        let isPaused = false;
+
+        const gameBoard = document.getElementById('gameBoard');
+        const scoreElement = document.getElementById('score');
+        const lengthElement = document.getElementById('length');
+        const startOverlay = document.getElementById('startOverlay');
+
+        function generateFood() {
+            let newFood;
+            do {
+                newFood = [
+                    Math.floor(Math.random() * GRID_SIZE),
+                    Math.floor(Math.random() * GRID_SIZE)
+                ];
+            } while (snake.some(segment => segment[0] === newFood[0] && segment[1] === newFood[1]));
+            return newFood;
+        }
+
+        function drawGame() {
+            // 清空游戏板
+            const cells = gameBoard.querySelectorAll('.cell');
+            cells.forEach(cell => cell.remove());
+
+            // 绘制蛇
+            snake.forEach((segment, index) => {
+                const cell = document.createElement('div');
+                cell.className = index === 0 ? 'cell snake-head' : 'cell snake-body';
+                cell.style.left = segment[0] * CELL_SIZE + 'px';
+                cell.style.top = segment[1] * CELL_SIZE + 'px';
+                gameBoard.appendChild(cell);
+            });
+
+            // 绘制食物
+            const foodCell = document.createElement('div');
+            foodCell.className = 'cell food';
+            foodCell.style.left = food[0] * CELL_SIZE + 'px';
+            foodCell.style.top = food[1] * CELL_SIZE + 'px';
+            gameBoard.appendChild(foodCell);
+        }
+
+        function updateGame() {
+            if (!isPlaying || isPaused) return;
+
+            const head = snake[0];
+            const newHead = [head[0] + direction.x, head[1] + direction.y];
+
+            // 检查碰撞
+            if (
+                newHead[0] < 0 || newHead[0] >= GRID_SIZE ||
+                newHead[1] < 0 || newHead[1] >= GRID_SIZE ||
+                snake.some(segment => segment[0] === newHead[0] && segment[1] === newHead[1])
+            ) {
+                gameOver();
+                return;
+            }
+
+            snake.unshift(newHead);
+
+            // 检查是否吃到食物
+            if (newHead[0] === food[0] && newHead[1] === food[1]) {
+                score += 10;
+                scoreElement.textContent = score;
+                lengthElement.textContent = snake.length;
+                food = generateFood();
+            } else {
+                snake.pop();
+            }
+
+            drawGame();
+        }
+
+        function startGame() {
+            snake = [[10, 10]];
+            direction = { x: 1, y: 0 };
+            score = 0;
+            food = generateFood();
+            isPlaying = true;
+            isPaused = false;
+
+            scoreElement.textContent = score;
+            lengthElement.textContent = snake.length;
+            startOverlay.style.display = 'none';
+
+            if (gameLoop) clearInterval(gameLoop);
+            gameLoop = setInterval(updateGame, INITIAL_SPEED);
+            drawGame();
+        }
+
+        function gameOver() {
+            isPlaying = false;
+            clearInterval(gameLoop);
+
+            const overlay = document.createElement('div');
+            overlay.className = 'overlay';
+            overlay.innerHTML = `
+                <h2>游戏结束!</h2>
+                <p>最终得分: ${score}</p>
+                <button onclick="restartGame()">重新开始</button>
+            `;
+            gameBoard.appendChild(overlay);
+        }
+
+        function restartGame() {
+            const overlay = gameBoard.querySelector('.overlay:not(#startOverlay)');
+            if (overlay) overlay.remove();
+            startGame();
+        }
+
+        function togglePause() {
+            if (!isPlaying) return;
+            isPaused = !isPaused;
+
+            if (isPaused) {
+                const overlay = document.createElement('div');
+                overlay.className = 'overlay';
+                overlay.id = 'pauseOverlay';
+                overlay.innerHTML = `
+                    <h2>暂停</h2>
+                    <p>按空格键继续</p>
+                `;
+                gameBoard.appendChild(overlay);
+            } else {
+                const pauseOverlay = document.getElementById('pauseOverlay');
+                if (pauseOverlay) pauseOverlay.remove();
+            }
+        }
+
+        // 键盘控制
+        document.addEventListener('keydown', (e) => {
+            if (!isPlaying && (e.key === ' ' || e.key === 'Enter')) {
+                if (startOverlay.style.display !== 'none') {
+                    startGame();
+                }
+                return;
+            }
+
+            if (e.key === ' ') {
+                e.preventDefault();
+                togglePause();
+                return;
+            }
+
+            if (isPaused) return;
+
+            switch (e.key) {
+                case 'ArrowUp':
+                    if (direction.y === 0) direction = { x: 0, y: -1 };
+                    break;
+                case 'ArrowDown':
+                    if (direction.y === 0) direction = { x: 0, y: 1 };
+                    break;
+                case 'ArrowLeft':
+                    if (direction.x === 0) direction = { x: -1, y: 0 };
+                    break;
+                case 'ArrowRight':
+                    if (direction.x === 0) direction = { x: 1, y: 0 };
+                    break;
+            }
+        });
+
+        // 移动端触摸控制
+        let touchStartX = 0;
+        let touchStartY = 0;
+
+        gameBoard.addEventListener('touchstart', (e) => {
+            touchStartX = e.touches[0].clientX;
+            touchStartY = e.touches[0].clientY;
+        });
+
+        gameBoard.addEventListener('touchend', (e) => {
+            if (!isPlaying || isPaused) return;
+
+            const touchEndX = e.changedTouches[0].clientX;
+            const touchEndY = e.changedTouches[0].clientY;
+
+            const deltaX = touchEndX - touchStartX;
+            const deltaY = touchEndY - touchStartY;
+
+            if (Math.abs(deltaX) > Math.abs(deltaY)) {
+                if (deltaX > 0 && direction.x === 0) {
+                    direction = { x: 1, y: 0 };
+                } else if (deltaX < 0 && direction.x === 0) {
+                    direction = { x: -1, y: 0 };
+                }
+            } else {
+                if (deltaY > 0 && direction.y === 0) {
+                    direction = { x: 0, y: 1 };
+                } else if (deltaY < 0 && direction.y === 0) {
+                    direction = { x: 0, y: -1 };
+                }
+            }
+        });
+    </script>
+</body>
+</html>
